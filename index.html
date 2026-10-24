@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Core Banking Portal</title>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: #f0f2f5; margin: 0; padding: 40px 20px; display: flex; justify-content: center; }
+        .container { background: #fff; width: 100%; max-width: 600px; padding: 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h2 { color: #1a202c; margin-top: 0; }
+        input, button { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 15px; }
+        button { background: #2b6cb0; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button:hover { background: #2c5282; }
+        .dashboard { display: none; }
+        .balance-card { background: #ebf8ff; border: 1px solid #bee3f8; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .tx-list { list-style: none; padding: 0; }
+        .tx-item { padding: 10px 0; border-bottom: 1px solid #edf2f7; display: flex; justify-content: space-between; }
+        .debit { color: #e53e3e; }
+        .credit { color: #38a169; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Auth Section -->
+    <div id="authSection">
+        <h2 id="formTitle">Banking Portal Login</h2>
+        <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
+        <button onclick="login()">Login</button>
+        <button onclick="register()" style="background:#4a5568;">Create New Account</button>
+        <p id="authError" style="color:red;"></p>
+    </div>
+
+    <!-- Banking Dashboard -->
+    <div id="dashboardSection" class="dashboard">
+        <h2>Welcome, <span id="userDisp"></span></h2>
+        <div class="balance-card">
+            <small style="color:#4a5568;">Account Number: <strong id="accNumDisp"></strong></small>
+            <h3 style="margin: 5px 0 0 0;">Balance: $<span id="balanceDisp">0.00</span></h3>
+        </div>
+
+        <h3>Transfer Funds</h3>
+        <input type="text" id="recipientAcc" placeholder="Recipient Account Number (e.g. ACCT12345678)">
+        <input type="number" id="transferAmt" placeholder="Amount ($)">
+        <button onclick="sendTransfer()">Send Money</button>
+        <p id="transferMsg" style="color:green;"></p>
+
+        <h3>Recent Activity</h3>
+        <ul id="txList" class="tx-list"></ul>
+        <button onclick="logout()" style="background:#e53e3e; margin-top:20px;">Logout</button>
+    </div>
+</div>
+
+<script>
+    let token = localStorage.getItem('token');
+
+    if (token) loadDashboard();
+
+    async function login() {
+        const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: username.value, password: password.value })
+        });
+        const data = await res.json();
+        if (data.token) {
+            localStorage.setItem('token', data.token);
+            loadDashboard();
+        } else {
+            authError.innerText = data.error;
+        }
+    }
+
+    async function register() {
+        const res = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: username.value, password: password.value })
+        });
+        const data = await res.json();
+        if (data.accountNumber) {
+            alert('Account Created! Account Number: ' + data.accountNumber);
+        } else {
+            authError.innerText = data.error;
+        }
+    }
+
+    async function loadDashboard() {
+        const res = await fetch('/api/account', {
+            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+        });
+        if (res.status !== 200) return logout();
+        const data = await res.json();
+
+        authSection.style.display = 'none';
+        dashboardSection.style.display = 'block';
+
+        userDisp.innerText = data.user.username;
+        accNumDisp.innerText = data.user.account_number;
+        balanceDisp.innerText = data.user.balance.toFixed(2);
+
+        txList.innerHTML = data.transactions.map(t => `
+            <li class="tx-item">
+                <span>${t.type} to ${t.recipient_account || 'N/A'}</span>
+                <strong class="${t.type.toLowerCase()}">${t.type === 'DEBIT' ? '-' : '+'}$${t.amount.toFixed(2)}</strong>
+            </li>
+        `).join('');
+    }
+
+    async function sendTransfer() {
+        const res = await fetch('/api/transfer', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + localStorage.getItem('token')
+            },
+            body: JSON.stringify({ recipientAccount: recipientAcc.value, amount: transferAmt.value })
+        });
+        const data = await res.json();
+        if (data.message) {
+            transferMsg.innerText = data.message;
+            loadDashboard();
+        } else {
+            alert(data.error);
+        }
+    }
+
+    function logout() {
+        localStorage.removeItem('token');
+        location.reload();
+    }
+</script>
+</body>
+</html>
